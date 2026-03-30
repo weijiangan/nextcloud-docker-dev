@@ -3,70 +3,17 @@ services:
   # Proxy for ssl termination and easier hostname access
   # SSL certificates with the virtual host name need to be added to ./data/ssl
   proxy:
-    image: ghcr.io/juliusknorr/nextcloud-dev-nginx:latest
+    build: ./docker/nginx
     ports:
-      - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTP:-80}:80"
-      - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTPS:-443}:443"
+      - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTP:-8080}:80"
+      - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTPS:-8443}:443"
     volumes:
-      - ${DOCKER_SOCKET-/var/run/docker.sock}:/tmp/docker.sock:ro
       - ./data/ssl/:/etc/nginx/certs
       - ./data/nginx/vhost.d/:/etc/nginx/vhost.d
-    environment:
-      DHPARAM_BITS: 2048
-      DHPARAM_GENERATION: "false"
-      HTTPS_METHOD: "noredirect"
-      HSTS: "off"
-    cap_add:
-      - SYS_ADMIN
+    depends_on:
+      - nextcloud
     networks:
       default:
-        aliases:
-          - nextcloud${DOMAIN_SUFFIX}
-          - nextcloud2${DOMAIN_SUFFIX}
-          - nextcloud3${DOMAIN_SUFFIX}
-          - stable16${DOMAIN_SUFFIX}
-          - stable17${DOMAIN_SUFFIX}
-          - stable18${DOMAIN_SUFFIX}
-          - stable19${DOMAIN_SUFFIX}
-          - stable20${DOMAIN_SUFFIX}
-          - stable21${DOMAIN_SUFFIX}
-          - stable22${DOMAIN_SUFFIX}
-          - stable23${DOMAIN_SUFFIX}
-          - stable24${DOMAIN_SUFFIX}
-          - stable25${DOMAIN_SUFFIX}
-          - stable26${DOMAIN_SUFFIX}
-          - stable27${DOMAIN_SUFFIX}
-          - stable28${DOMAIN_SUFFIX}
-          - stable29${DOMAIN_SUFFIX}
-          - stable30${DOMAIN_SUFFIX}
-          - stable31${DOMAIN_SUFFIX}
-          - stable32${DOMAIN_SUFFIX}
-          - stable33${DOMAIN_SUFFIX}
-          - mail${DOMAIN_SUFFIX}
-          - sso${DOMAIN_SUFFIX}
-          - minio${DOMAIN_SUFFIX}
-          - rustfs${DOMAIN_SUFFIX}
-          - imap${DOMAIN_SUFFIX}
-          - collabora${DOMAIN_SUFFIX}
-          - codedev${DOMAIN_SUFFIX}
-          - onlyoffice${DOMAIN_SUFFIX}
-          - proxy${DOMAIN_SUFFIX}
-          - hpb${DOMAIN_SUFFIX}
-          - push${DOMAIN_SUFFIX}
-          - keycloak${DOMAIN_SUFFIX}
-          - portal${DOMAIN_SUFFIX}
-          - gs1${DOMAIN_SUFFIX}
-          - gs2${DOMAIN_SUFFIX}
-          - lookup${DOMAIN_SUFFIX}
-          - elasticsearch${DOMAIN_SUFFIX}
-          - elasticsearch-ui${DOMAIN_SUFFIX}
-          - pgadmin${DOMAIN_SUFFIX}
-          - phpmyadmin${DOMAIN_SUFFIX}
-          - talk-signaling${DOMAIN_SUFFIX}
-          - talk-recording${DOMAIN_SUFFIX}
-          - authentik${DOMAIN_SUFFIX}
-    extra_hosts:
-      - host.docker.internal:host-gateway
 
   haproxy:
     image: haproxy
@@ -78,7 +25,9 @@ services:
       - ./docker/configs/haproxy.conf:/usr/local/etc/haproxy/haproxy.cfg:ro
 
   nextcloud:
-    image: ghcr.io/juliusknorr/nextcloud-dev-php${PHP_VERSION:-82}:latest
+    build:
+      context: ./docker
+      dockerfile: php84/Dockerfile
     environment:
       SQL: ${SQL:-mysql}
       NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
@@ -105,7 +54,6 @@ services:
       - database-${SQL:-mysql}
       - redis
       - mail
-      - ${PROXY_SERVICE:-proxy}
     extra_hosts:
       - host.docker.internal:host-gateway
 

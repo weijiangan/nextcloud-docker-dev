@@ -1,4 +1,4 @@
-FROM php:8.4-apache
+FROM php:8.4-fpm
 
 ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
@@ -44,6 +44,7 @@ RUN apt update && apt-get install -y --no-install-recommends \
     jq \
     ripgrep \
     rsync \
+    nginx \
     && rm -rf /var/lib/apt/lists/*
 
 # Install PHPUnit
@@ -80,13 +81,15 @@ ADD configs/php/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
 # Setup blackfire probe
 RUN mv /usr/local/etc/php/conf.d/docker-php-ext-blackfire.ini /usr/local/etc/php/conf.d/docker-php-ext-blackfire.ini.disabled
 
-RUN echo "ServerName localhost" >> /etc/apache2/apache2.conf
+# Configure nginx
+RUN mkdir -p /var/log/nginx && \
+    chown -R www-data:www-data /var/log/nginx && \
+    ln -sf /dev/stdout /var/log/nginx/access.log && \
+    ln -sf /dev/stderr /var/log/nginx/error.log
 
-# mod_rewrite
-RUN a2enmod rewrite headers
-
-# increase limit request body
-RUN echo "LimitRequestBody 0" > /etc/apache2/conf-available/limit-request-body.conf && a2enconf limit-request-body
+ADD php84/configs/nginx/nextcloud.conf /etc/nginx/sites-available/nextcloud
+RUN ln -s /etc/nginx/sites-available/nextcloud /etc/nginx/sites-enabled/nextcloud && \
+    rm -f /etc/nginx/sites-enabled/default
 
 VOLUME /var/www/html
 VOLUME /var/www/html/apps-writable
@@ -100,8 +103,12 @@ ENV WITH_REDIS=NO
 ENV WEBROOT=/var/www/html
 WORKDIR /var/www/html
 
+# Ensure PHP-FPM socket directory exists and configure socket listening
+RUN install -d -o www-data -g www-data /run/php
+ADD php84/configs/php/zzz-nextcloud.conf /usr/local/etc/php-fpm.d/zzz-nextcloud.conf
+
 ENTRYPOINT  ["/usr/local/bin/bootstrap.sh"]
-CMD ["apache2-foreground"]
+CMD ["php-fpm"]
 
 ADD data/installing.html /root/installing.html
 ADD configs/autoconfig_mysql.php configs/autoconfig_pgsql.php configs/autoconfig_oci.php configs/default.config.php configs/redis.config.php configs/apcu.config.php /root/

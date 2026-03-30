@@ -11,17 +11,25 @@ indent() { sed 's/^/   /'; }
 # Prepare waiting page during auto installation
 cp /root/installing.html /var/www/html/installing.html
 
-tee /etc/apache2/conf-enabled/install.conf << EOF
-<Directory "/var/www/html">
-AllowOverride None
-RewriteEngine On
-RewriteBase /
-RewriteCond %{REQUEST_URI} !/installing.html$
-RewriteRule .* /installing.html [L]
-</Directory>
+cat > /etc/nginx/conf.d/install.conf << 'EOF'
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name _;
+    root /var/www/html;
+    index installing.html;
+    location / {
+        try_files $uri $uri/ /installing.html;
+    }
+	location ~ \.php$ {
+		include fastcgi_params;
+		fastcgi_pass unix:/run/php/php-fpm.sock;
+		fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+	}
+}
 EOF
 
-pkill -USR1 apache2
+	nginx -s reload 2>/dev/null || true
 
 output() {
 	echo "$@"
@@ -214,7 +222,8 @@ configure_ssl_proxy() {
 		OCC config:system:set overwrite.cli.url --value "https://$VIRTUAL_HOST" &
 	else
 		echo "🗝 No SSL proxy, configuring overwrite.cli.url accordingly"
-		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST" &
+		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST:8080" &
+		OCC config:system:set overwritehost --value "http://$VIRTUAL_HOST:8080" &
 	fi
 	update-ca-certificates
 }
@@ -299,7 +308,7 @@ install() {
 	# Setup domains
 	# localhost is at index 0 due to the installation
 	INTERNAL_IP_ADDRESS=$(ip a show type veth | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*")
-	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${VIRTUAL_HOST} ${INTERNAL_IP_ADDRESS} localhost"
+	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${VIRTUAL_HOST} ${VIRTUAL_HOST}:8080 ${INTERNAL_IP_ADDRESS} localhost"
 	if [ -n "${NEXTCLOUD_TRUSTED_DOMAINS+x}" ]; then
 		echo "🔧 setting trusted domains…"
 		NC_TRUSTED_DOMAIN_IDX=1
@@ -435,9 +444,9 @@ check_source() {
 	wait_for_other_containers
 	setup
 	run_hook_before_start
-	rm /etc/apache2/conf-enabled/install.conf
+	rm -f /etc/nginx/conf.d/install.conf
 	rm -f /var/www/html/installing.html
-	pkill -USR1 apache2
+	nginx -s reload
 	run_hook_after_start
 ) &
 
@@ -449,5 +458,6 @@ tail --follow "$WEBROOT"/data/nextcloud.log /var/log/cron/nextcloud.log /var/log
 
 echo "⌚ Starting cron"
 /usr/sbin/cron -f &
-echo "🚀 Starting apache"
+echo "🚀 Starting nginx and php-fpm"
+nginx &
 exec "$@"
