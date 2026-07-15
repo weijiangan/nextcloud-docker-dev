@@ -223,7 +223,7 @@ configure_ssl_proxy() {
 	else
 		echo "🗝 No SSL proxy, configuring overwrite.cli.url accordingly"
 		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST:8080" &
-		OCC config:system:set overwritehost --value "http://$VIRTUAL_HOST:8080" &
+		OCC config:system:set overwritehost --value "$VIRTUAL_HOST:8080" &
 	fi
 	update-ca-certificates
 }
@@ -294,9 +294,9 @@ install() {
 			((WAIT_TIME++))
 		done
 	done
-	configure_gs
-	configure_ldap
-	configure_oidc
+	# configure_gs
+	# configure_ldap
+	# configure_oidc
 
 	output "🔧 Finetuning the configuration"
 	if [ "$WITH_REDIS" != "NO" ]; then
@@ -428,6 +428,7 @@ check_source() {
 		(cd /tmp/server && git submodule update --init)
 		output "Cloning additional apps"
 		git clone --depth 1 --branch "${SERVER_BRANCH:-master}" https://github.com/nextcloud/viewer.git /tmp/server/apps/viewer
+		git clone --depth 1 --branch "${SERVER_BRANCH:-master}" https://github.com/nextcloud/previewgenerator.git /tmp/server/apps/previewgenerator
 
 		# shallow clone of submodules https://stackoverflow.com/questions/2144406/how-to-make-shallow-git-submodules
 		git config -f .gitmodules submodule.3rdparty.shallow true
@@ -446,7 +447,9 @@ check_source() {
 	run_hook_before_start
 	rm -f /etc/nginx/conf.d/install.conf
 	rm -f /var/www/html/installing.html
-	nginx -s reload
+	# nginx -s reload
+	echo "🚀 Starting nc-server and php-fpm"
+	sudo -E -u www-data nc-server --root "$WEBROOT" --listen 0.0.0.0:80 &
 	run_hook_after_start
 ) &
 
@@ -458,6 +461,4 @@ tail --follow "$WEBROOT"/data/nextcloud.log /var/log/cron/nextcloud.log /var/log
 
 echo "⌚ Starting cron"
 /usr/sbin/cron -f &
-echo "🚀 Starting nginx and php-fpm"
-nginx &
 exec "$@"
