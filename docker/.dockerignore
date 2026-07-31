@@ -1,0 +1,32 @@
+# Git
+.git
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# Test files
+tests/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build artifacts
+target/
+
+# Logs
+*.log
+
+# Docker compose (not needed in build context)
+docker-compose.yml
+.env
+.example.env
+
+# nc-server-core symlink is needed, don't exclude it
+# nc-server-core/
+nc-server-core/core-rs/target
+nc-server-core/core-rs/packaging

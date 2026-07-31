@@ -1,0 +1,4 @@
+services:
+  nextcloud:
+    environment:
+      RUST_LOG: debug

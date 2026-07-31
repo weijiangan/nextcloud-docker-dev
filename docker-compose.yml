@@ -7,6 +7,9 @@ services:
     ports:
       - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTP:-8080}:80"
       - "${IP_BIND:-127.0.0.1}:${PROXY_PORT_HTTPS:-8443}:443"
+      # Dev-only PHP entry on its own port, LAN-accessible like the Rust
+      # default_server, for iOS A/B testing (http://<lan-ip>:9090 → PHP).
+      - "${IP_BIND:-127.0.0.1}:9090:9090"
     volumes:
       - ./data/ssl/:/etc/nginx/certs
       - ./data/nginx/vhost.d/:/etc/nginx/vhost.d
@@ -40,6 +43,7 @@ services:
       BLACKFIRE_CLIENT_TOKEN:
       PRIMARY: ${PRIMARY:-local}
       PHP_XDEBUG_MODE: ${PHP_XDEBUG_MODE:-develop}
+      RUST_LOG: debug
     volumes:
       - '${REPO_PATH_SERVER}:/var/www/html'
       - '${REPO_PATH_SERVER}/apps-extra:/var/www/html/apps-extra'
@@ -50,6 +54,9 @@ services:
       - ./data/skeleton/:/skeleton
       - ./data/additional.config.php:/var/www/html/config/additional.config.php:ro
       - ./data/shared:/shared
+      # Dev-only: TCP php-fpm pool so the proxy nginx can reach PHP directly
+      # (bypassing the Rust nc-server) for PHP-vs-Rust A/B comparison.
+      - ./docker/configs/php-fpm-tcp.conf:/usr/local/etc/php-fpm.d/zzzz-tcp.conf:ro
     depends_on:
       - database-${SQL:-mysql}
       - redis

@@ -222,8 +222,7 @@ configure_ssl_proxy() {
 		OCC config:system:set overwrite.cli.url --value "https://$VIRTUAL_HOST" &
 	else
 		echo "🗝 No SSL proxy, configuring overwrite.cli.url accordingly"
-		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST:8080" &
-		OCC config:system:set overwritehost --value "$VIRTUAL_HOST:8080" &
+		OCC config:system:set overwrite.cli.url --value "http://$VIRTUAL_HOST" &
 	fi
 	update-ca-certificates
 }
@@ -308,7 +307,7 @@ install() {
 	# Setup domains
 	# localhost is at index 0 due to the installation
 	INTERNAL_IP_ADDRESS=$(ip a show type veth | grep -o "inet [0-9]*\.[0-9]*\.[0-9]*\.[0-9]*" | grep -o "[0-9]*\.[0-9]*\.[0-9]*\.[0-9]*")
-	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${VIRTUAL_HOST} ${VIRTUAL_HOST}:8080 ${INTERNAL_IP_ADDRESS} localhost"
+	NEXTCLOUD_TRUSTED_DOMAINS="${NEXTCLOUD_TRUSTED_DOMAINS:-nextcloud} ${VIRTUAL_HOST} ${VIRTUAL_HOST}:8080 ${INTERNAL_IP_ADDRESS} 192.168.50.96 192.168.50.96:8080 192.168.50.96:9090 localhost php.dev.local rust.dev.local"
 	if [ -n "${NEXTCLOUD_TRUSTED_DOMAINS+x}" ]; then
 		echo "🔧 setting trusted domains…"
 		NC_TRUSTED_DOMAIN_IDX=1
