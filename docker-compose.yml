@@ -10,6 +10,8 @@ services:
       # Dev-only PHP entry on its own port, LAN-accessible like the Rust
       # default_server, for iOS A/B testing (http://<lan-ip>:9090 → PHP).
       - "${IP_BIND:-127.0.0.1}:9090:9090"
+      # Phase 16.1: pure-PHP differential oracle (proxy -> oracle:9000 php-fpm).
+      - "${IP_BIND:-127.0.0.1}:9091:9091"
     volumes:
       - ./data/ssl/:/etc/nginx/certs
       - ./data/nginx/vhost.d/:/etc/nginx/vhost.d
@@ -56,6 +58,56 @@ services:
       - ./data/shared:/shared
       # Dev-only: TCP php-fpm pool so the proxy nginx can reach PHP directly
       # (bypassing the Rust nc-server) for PHP-vs-Rust A/B comparison.
+      - ./docker/configs/php-fpm-tcp.conf:/usr/local/etc/php-fpm.d/zzzz-tcp.conf:ro
+    depends_on:
+      - database-${SQL:-mysql}
+      - redis
+      - mail
+    extra_hosts:
+      - host.docker.internal:host-gateway
+
+  # ── Phase 16.1: pure-PHP differential oracle ────────────────────────────────
+  # A clone of `nextcloud` (same local php84 image, env, additional.config.php,
+  # skeleton) on its OWN volumes and VIRTUAL_HOST, so the bootstrap installs into
+  # a SEPARATE DB `oracle`. The nc-difftest harness diffs the Rust SUT
+  # (`nextcloud`, :8080) against this as the known-good PHP reference. Reached as
+  # PURE PHP via the proxy vhost on :9091 (-> oracle:9000 php-fpm TCP), exactly
+  # like the :9090 dev entry but on the oracle's own DB. The Rust nc-server still
+  # boots inside on :80 (bootstrap.sh starts it unconditionally) but is never
+  # routed to. NOT related to the Oracle DBMS (`database-oci` / `oracle` volume).
+  oracle:
+    build:
+      context: ./docker
+      dockerfile: php84/Dockerfile
+    # Reuse the SUT's image verbatim (same php84/Dockerfile) instead of building
+    # a second `master-oracle` image — avoids a duplicate multi-stage Rust compile
+    # and guarantees the oracle is byte-identical to what the SUT runs. Runtime
+    # config (env/volumes) still differs per-container.
+    image: master-nextcloud:latest
+    environment:
+      SQL: ${SQL:-mysql}
+      NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
+      NEXTCLOUD_AUTOINSTALL_APPS:
+      WITH_REDIS: "YES"
+      VIRTUAL_HOST: "oracle${DOMAIN_SUFFIX}"
+      ADDITIONAL_APPS_PATH:
+      NEXTCLOUD_TRUSTED_DOMAINS:
+      BLACKFIRE_CLIENT_ID:
+      BLACKFIRE_CLIENT_TOKEN:
+      PRIMARY: ${PRIMARY:-local}
+      PHP_XDEBUG_MODE: ${PHP_XDEBUG_MODE:-develop}
+    volumes:
+      - '${REPO_PATH_SERVER}:/var/www/html'
+      - '${REPO_PATH_SERVER}/apps-extra:/var/www/html/apps-extra'
+      - '${ADDITIONAL_APPS_PATH:-./data/apps-extra}:/var/www/html/apps-shared'
+      - data-oracle:/var/www/html/data
+      - config-oracle:/var/www/html/config
+      - apps-writable-oracle:/var/www/html/apps-writable
+      - ./data/skeleton/:/skeleton
+      - ./data/additional.config.php:/var/www/html/config/additional.config.php:ro
+      - ./data/shared:/shared
+      # Same TCP php-fpm pool as the SUT so the proxy can reach PHP directly
+      # (bypassing the Rust nc-server) for the differential harness.
       - ./docker/configs/php-fpm-tcp.conf:/usr/local/etc/php-fpm.d/zzzz-tcp.conf:ro
     depends_on:
       - database-${SQL:-mysql}
@@ -1233,6 +1285,9 @@ volumes:
   data3:
   config3:
   apps-writable3:
+  data-oracle:
+  config-oracle:
+  apps-writable-oracle:
   document_data:
   document_log:
   objectstorage_minio:

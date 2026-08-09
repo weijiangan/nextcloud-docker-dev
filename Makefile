@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: images docker-build pull-all docs docs-watch
+.PHONY: images docker-build pull-all docs docs-watch diff-up
 
 .ONESHELL:
 images: docker/*/Dockerfile docker/Dockerfile.*
@@ -19,6 +19,24 @@ pull-all:
 pull-installed:
 	docker image ls | grep juliusknorr/nextcloud-dev | cut -f 1 -d " "
 	docker image ls | grep juliusknorr/nextcloud-dev | cut -f 1 -d " " | xargs -L 1 docker pull
+
+# ── Phase 16.1: differential-test harness bring-up ────────────────────────────
+# SUT    = nextcloud (Rust nc-server fronting PHP)       → http://127.0.0.1:8080
+# Oracle = oracle    (pure PHP, proxy → oracle:9000 fpm) → http://127.0.0.1:9091
+# Both share database-pgsql + redis but use SEPARATE databases (nextcloud/oracle).
+# --build: my_proxy.conf is baked into the proxy image (needs rebuild to expose
+# :9091), and building nextcloud+oracle together guarantees the SUT and oracle
+# run the IDENTICAL master-nextcloud:latest image — a correctness requirement
+# for a differential oracle. BuildKit caching makes unchanged rebuilds fast.
+# previews_hpb: the shared Imaginary (aio-imaginary) — scenario 27 asserts
+# byte parity of previews generated through it (Phase 16.11).
+diff-up:
+	docker compose up -d --build proxy nextcloud oracle database-pgsql redis previews_hpb
+	@echo "Waiting for both instances to report installed:true …"; \
+	until curl -fsS -H 'Host: nextcloud.local' http://127.0.0.1:8080/status.php 2>/dev/null | grep -q '"installed":true'; do sleep 2; done; \
+	echo "  ready: SUT    http://127.0.0.1:8080  (Rust)"; \
+	until curl -fsS -H 'Host: oracle.local' http://127.0.0.1:9091/status.php 2>/dev/null | grep -q '"installed":true'; do sleep 2; done; \
+	echo "  ready: Oracle http://127.0.0.1:9091  (pure PHP)"
 
 # Empty target to always build
 docker-build:
