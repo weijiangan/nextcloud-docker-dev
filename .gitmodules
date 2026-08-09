@@ -1,3 +1,0 @@
-[submodule "docker/nc-server-core"]
-	path = docker/nc-server-core
-	url = file:///home/weijiangan/Git/nextcloud-rewrite/nc-server-core
