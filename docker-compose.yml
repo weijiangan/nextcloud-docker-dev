@@ -30,9 +30,9 @@ services:
       - ./docker/configs/haproxy.conf:/usr/local/etc/haproxy/haproxy.cfg:ro
 
   nextcloud:
-    build:
-      context: ./docker
-      dockerfile: php84/Dockerfile
+    # Built once via `make sut-image` (podman --build-context rustsrc=…);
+    # compose's classic builder cannot pass additional build contexts.
+    image: master-nextcloud:latest
     environment:
       SQL: ${SQL:-mysql}
       NEXTCLOUD_AUTOINSTALL: ${NEXTCLOUD_AUTOINSTALL:-YES}
@@ -76,10 +76,7 @@ services:
   # boots inside on :80 (bootstrap.sh starts it unconditionally) but is never
   # routed to. NOT related to the Oracle DBMS (`database-oci` / `oracle` volume).
   oracle:
-    build:
-      context: ./docker
-      dockerfile: php84/Dockerfile
-    # Reuse the SUT's image verbatim (same php84/Dockerfile) instead of building
+    # Reuse the SUT's image verbatim (`make sut-image`) instead of building
     # a second `master-oracle` image — avoids a duplicate multi-stage Rust compile
     # and guarantees the oracle is byte-identical to what the SUT runs. Runtime
     # config (env/volumes) still differs per-container.

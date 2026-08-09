@@ -12,7 +12,10 @@ WORKDIR /build
 # Copy only the root Cargo manifests first to leverage Docker layer caching.
 # Workspace members (crates/*) are intentionally NOT copied here — cargo's resolver
 # v2 warns and skips missing members, so the dummy build below only compiles deps.
-COPY nc-server-core/core-rs/Cargo.toml nc-server-core/core-rs/Cargo.lock ./
+# The Rust source arrives as the `rustsrc` build context (`make sut-image` runs
+# `podman build --build-context rustsrc=<core-rs>` — compose's classic builder
+# cannot pass additional build contexts).
+COPY --from=rustsrc Cargo.toml Cargo.lock ./
 
 # Create dummy binary at workspace root to force cargo to download & compile all
 # dependencies. --mount=type=cache persists cargo registry and target/ across
@@ -25,10 +28,10 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry,id=cargo-registry \
     rm -rf src target/release/nc-server 2>/dev/null || true
 
 # Copy php-shim (needed at runtime)
-COPY nc-server-core/core-rs/php-shim/ ./php-shim/
+COPY --from=rustsrc php-shim/ ./php-shim/
 
 # Copy full source - this layer invalidates when your code changes
-COPY nc-server-core/core-rs/ .
+COPY --from=rustsrc . .
 
 # Real build - cache mounts keep compiled deps even when source changes, so only
 # your modified code is recompiled (typically seconds instead of minutes).

@@ -24,14 +24,17 @@ pull-installed:
 # SUT    = nextcloud (Rust nc-server fronting PHP)       → http://127.0.0.1:8080
 # Oracle = oracle    (pure PHP, proxy → oracle:9000 fpm) → http://127.0.0.1:9091
 # Both share database-pgsql + redis but use SEPARATE databases (nextcloud/oracle).
-# --build: my_proxy.conf is baked into the proxy image (needs rebuild to expose
-# :9091), and building nextcloud+oracle together guarantees the SUT and oracle
-# run the IDENTICAL master-nextcloud:latest image — a correctness requirement
-# for a differential oracle. BuildKit caching makes unchanged rebuilds fast.
+# The shared master-nextcloud:latest image comes from `make sut-image` (root
+# Makefile — podman --build-context rustsrc=…): both services reference it, so
+# the SUT and oracle are byte-identical by construction — a correctness
+# requirement for a differential oracle. proxy is rebuilt for the :9091 vhost;
+# it is restarted afterwards because it caches the nextcloud upstream IP.
 # previews_hpb: the shared Imaginary (aio-imaginary) — scenario 27 asserts
 # byte parity of previews generated through it (Phase 16.11).
 diff-up:
-	docker compose up -d --build proxy nextcloud oracle database-pgsql redis previews_hpb
+	docker compose up -d --build proxy
+	docker compose up -d nextcloud oracle database-pgsql redis previews_hpb
+	docker compose restart proxy
 	@echo "Waiting for both instances to report installed:true …"; \
 	until curl -fsS -H 'Host: nextcloud.local' http://127.0.0.1:8080/status.php 2>/dev/null | grep -q '"installed":true'; do sleep 2; done; \
 	echo "  ready: SUT    http://127.0.0.1:8080  (Rust)"; \
